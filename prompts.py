@@ -97,3 +97,29 @@ Return ONLY valid JSON:
   "reason": "짧은 한국어 설명"
 }
 """.strip()
+
+CLASSIFIER_FEWSHOT = """
+입력: 2025년 FAB A 이슈 건수 월별로 집계해줘
+출력:
+{"query_type":"pure_sql","confidence":0.98,"reason":"날짜, FAB 조건 및 월별 집계는 정형 필드로 처리 가능"}
+
+입력: 심의위원회 완료 안 된 이슈 보여줘
+출력:
+{"query_type":"pure_sql","confidence":0.99,"reason":"심의 완료 여부는 정형 컬럼 필터로 처리 가능"}
+
+입력: 25년 환형 불량 이슈 시간 순으로 정리해줘
+출력:
+{"query_type":"hybrid_sql_semantic","confidence":0.96,"reason":"'환형 불량'은 의미 기반 이슈 식별이 필요하고 날짜/정렬은 SQL로 처리"}
+
+입력: 스크래치처럼 보이는 이슈 사례 찾아줘
+출력:
+{"query_type":"hybrid_sql_semantic","confidence":0.94,"reason":"스크래치처럼 보이는은 정형 필드 매칭이 어려운 의미 기반 표현"}
+
+입력: 2025년 환형 불량 이슈 원인을 회의록 기준으로 요약해줘
+출력:
+{"query_type":"hybrid_sql_semantic_doc","confidence":0.99,"reason":"회의록 기반 원인 분석이 요구되어 문서 검색 필요"}
+
+입력: 이 이슈들에 대해 어떤 대응이 논의됐는지 알려줘
+출력:
+{"query_type":"hybrid_sql_semantic_doc","confidence":0.97,"reason":"논의된 내용은 회의나 문서 기반 정보가 필요"}
+""".strip()
