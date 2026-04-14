@@ -160,12 +160,14 @@ Use ONLY the following values for categorical fields.
 [VALID_AREA_VALUES]
 {AREA_CANDIDATES}
 
-Rules:
+Rules for categorical values:
 - Extract only values from these candidate lists.
 - Normalize spacing / casing / punctuation / typo variants to exact candidate values.
-- If multiple candidates are plausible, return null.
+- Each categorical field must be returned as a list.
+- If the user clearly mentions multiple valid values, return all of them.
+- If a mentioned expression cannot be reliably mapped to a candidate, do not include it.
+- If no valid value is mentioned, return an empty list.
 - Never invent a new categorical value.
-- If not explicitly mentioned or strongly implied, return null.
 
 ==================================================
 FIELDS TO EXTRACT
@@ -189,13 +191,14 @@ Extract the shortest meaningful issue-related phrase for semantic retrieval.
 
 Rules:
 - Keep it concise.
-- Remove extracted categorical values:
+- Remove all extracted categorical values:
   site / fab / tech / area
 - Remove time expressions.
 - Remove generic words such as:
   이슈, 사례, 건, 조회, 검색, 보여줘, 찾아줘, 정리해줘, 알려줘
-- Do not return the entire query unless unavoidable.
+- Do not return the full query unless unavoidable.
 - If no meaningful issue phrase exists, return null.
+- semantic_phrase should focus on issue meaning, defect pattern, symptom, or cause-related natural language expression.
 
 Examples:
 
@@ -217,10 +220,17 @@ GT scratch like defect
 Output:
 semantic_phrase = "scratch like defect"
 
+User:
+FAB A, FAB B GT와 CMP의 들뜸 이슈
+
+Output:
+semantic_phrase = "들뜸"
+
 Bad outputs:
 - "25년 FAB A GT 환형 불량"
 - "FAB A GT"
 - "2025년 환형 불량"
+- "GT와 CMP의 들뜸 이슈"
 
 ==================================================
 2. time_conditions
@@ -248,7 +258,7 @@ Supported patterns:
 5) Single month
 - 2025년 3월
 
-Use this schema:
+Use this schema for each time condition:
 
 {
   "field": "issue_date",
@@ -267,7 +277,9 @@ Examples:
   "field":"issue_date",
   "granularity":"year",
   "operator":"eq",
-  "value":2025
+  "value":2025,
+  "start":null,
+  "end":null
 }
 
 25년
@@ -276,7 +288,9 @@ Examples:
   "field":"issue_date",
   "granularity":"year",
   "operator":"eq",
-  "value":2025
+  "value":2025,
+  "start":null,
+  "end":null
 }
 
 2023년 이후
@@ -285,7 +299,9 @@ Examples:
   "field":"issue_date",
   "granularity":"year",
   "operator":"gte",
-  "value":2023
+  "value":2023,
+  "start":null,
+  "end":null
 }
 
 2024년 이전
@@ -294,7 +310,9 @@ Examples:
   "field":"issue_date",
   "granularity":"year",
   "operator":"lt",
-  "value":2024
+  "value":2024,
+  "start":null,
+  "end":null
 }
 
 2024년부터 2025년까지
@@ -303,6 +321,7 @@ Examples:
   "field":"issue_date",
   "granularity":"year",
   "operator":"between",
+  "value":null,
   "start":2024,
   "end":2025
 }
@@ -313,7 +332,9 @@ Examples:
   "field":"issue_date",
   "granularity":"year_month",
   "operator":"eq",
-  "value":"2025-03"
+  "value":"2025-03",
+  "start":null,
+  "end":null
 }
 
 If no time condition exists, return [].
@@ -322,7 +343,7 @@ If no time condition exists, return [].
 3. categorical fields
 ==================================================
 
-Extract only when clearly mentioned.
+Extract only when clearly mentioned and reliably mappable to valid candidate values.
 
 Fields:
 - site
@@ -330,42 +351,52 @@ Fields:
 - tech
 - area
 
+Rules:
+- Each field must be returned as a list.
+- Return all clearly mentioned valid values.
+- If a value is ambiguous, do not include it.
+- If nothing is mentioned, return [].
+
 Examples:
 
 User:
 FAB A 환형 불량 보여줘
 
 Output:
-fab = "FAB A"
+fab = ["FAB A"]
 
 User:
 SITE2 GT 공정 이슈
 
 Output:
-site = "SITE2"
-tech = "GT"
+site = ["SITE2"]
+tech = ["GT"]
 
 User:
 ETCH area 들뜸 사례
 
 Output:
-area = "ETCH"
+area = ["ETCH"]
 
 User:
-GT 볼록이 이슈
+GT와 CMP 볼록이 이슈
 
 Output:
-tech = "GT"
+tech = ["GT", "CMP"]
 
-If uncertain, return null.
+User:
+FAB A, FAB B의 환형 불량
+
+Output:
+fab = ["FAB A", "FAB B"]
 
 ==================================================
 4. Conservative Policy
 ==================================================
 
 If uncertain:
-- categorical field = null
-- semantic_phrase = minimal phrase
+- categorical field = []
+- semantic_phrase = minimal phrase or null
 - do not over-extract
 
 It is better to miss a weak filter than apply a wrong filter.
@@ -381,6 +412,8 @@ It is better to miss a weak filter than apply a wrong filter.
 - No trailing commas
 - semantic_phrase must not contain extracted site/fab/tech/area/time tokens
 - If no semantic clue exists, semantic_phrase = null
+- site, fab, tech, area must always be lists
+- If a categorical field has no extracted values, return []
 
 ==================================================
 OUTPUT JSON SCHEMA
@@ -389,10 +422,10 @@ OUTPUT JSON SCHEMA
 {
   "semantic_phrase": null,
   "time_conditions": [],
-  "site": null,
-  "fab": null,
-  "tech": null,
-  "area": null,
+  "site": [],
+  "fab": [],
+  "tech": [],
+  "area": [],
   "reason": "짧은 한국어 설명"
 }
 """.strip()
