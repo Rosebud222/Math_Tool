@@ -429,3 +429,161 @@ OUTPUT JSON SCHEMA
   "reason": "짧은 한국어 설명"
 }
 """.strip()
+
+SEMANTIC_SLOT_EXTRACTOR_FEWSHOT = """
+입력:
+{
+  "user_query": "25년 FAB A GT 환형 불량 이슈 정리해줘"
+}
+출력:
+{
+  "semantic_phrase": "환형 불량",
+  "time_conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "eq",
+      "value": 2025,
+      "start": null,
+      "end": null
+    }
+  ],
+  "site": [],
+  "fab": ["FAB A"],
+  "tech": ["GT"],
+  "area": [],
+  "reason": "2025년 FAB A GT 조건에서 환형 불량 semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "SITE2 CMP 볼록이 사례 찾아줘"
+}
+출력:
+{
+  "semantic_phrase": "볼록이",
+  "time_conditions": [],
+  "site": ["SITE2"],
+  "fab": [],
+  "tech": ["CMP"],
+  "area": [],
+  "reason": "SITE2 CMP 조건에서 볼록이 semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "FAB A, FAB B GT와 CMP 들뜸 이슈 보여줘"
+}
+출력:
+{
+  "semantic_phrase": "들뜸",
+  "time_conditions": [],
+  "site": [],
+  "fab": ["FAB A", "FAB B"],
+  "tech": ["GT", "CMP"],
+  "area": [],
+  "reason": "FAB A/FAB B 및 GT/CMP 조건에서 들뜸 semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "2023년 이후 GT 볼록이 이슈"
+}
+출력:
+{
+  "semantic_phrase": "볼록이",
+  "time_conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "gte",
+      "value": 2023,
+      "start": null,
+      "end": null
+    }
+  ],
+  "site": [],
+  "fab": [],
+  "tech": ["GT"],
+  "area": [],
+  "reason": "2023년 이후 GT 조건에서 볼록이 semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "2024년부터 2025년까지 SITE1 FAB C 스크래치처럼 보이는 사례"
+}
+출력:
+{
+  "semantic_phrase": "스크래치처럼 보이는",
+  "time_conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "between",
+      "value": null,
+      "start": 2024,
+      "end": 2025
+    }
+  ],
+  "site": ["SITE1"],
+  "fab": ["FAB C"],
+  "tech": [],
+  "area": [],
+  "reason": "2024~2025년 SITE1 FAB C 조건에서 스크래치 유사 표현 semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "ETCH area랑 PHOTO area의 들뜸 사례"
+}
+출력:
+{
+  "semantic_phrase": "들뜸",
+  "time_conditions": [],
+  "site": [],
+  "fab": [],
+  "tech": [],
+  "area": ["ETCH", "PHOTO"],
+  "reason": "ETCH/PHOTO area 조건에서 들뜸 semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "2025년 3월 FAB B GT ring defect"
+}
+출력:
+{
+  "semantic_phrase": "ring defect",
+  "time_conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year_month",
+      "operator": "eq",
+      "value": "2025-03",
+      "start": null,
+      "end": null
+    }
+  ],
+  "site": [],
+  "fab": ["FAB B"],
+  "tech": ["GT"],
+  "area": [],
+  "reason": "2025년 3월 FAB B GT 조건에서 ring defect semantic 검색용 슬롯 추출"
+}
+
+입력:
+{
+  "user_query": "FAB A, SITE2 알려줘"
+}
+출력:
+{
+  "semantic_phrase": null,
+  "time_conditions": [],
+  "site": ["SITE2"],
+  "fab": ["FAB A"],
+  "tech": [],
+  "area": [],
+  "reason": "semantic 표현 없이 categorical 필터만 존재"
+}
+""".strip()
