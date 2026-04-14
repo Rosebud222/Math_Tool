@@ -1,0 +1,198 @@
+def _build_in_filter(field_name: str, values: list[str]) -> str | None:
+    if not values:
+        return None
+
+    escaped = [v.replace('"', '\\"') for v in values]
+
+    if len(escaped) == 1:
+        return f'{field_name} == "{escaped[0]}"'
+
+    return "(" + " or ".join(f'{field_name} == "{v}"' for v in escaped) + ")"
+
+def _build_time_filter(time_conditions: list[TimeCondition]) -> list[str]:
+    clauses: list[str] = []
+
+    for cond in time_conditions:
+        if cond.field != "issue_date":
+            continue
+
+        if cond.granularity == "year":
+            if cond.operator == "eq" and cond.value is not None:
+                year = int(cond.value)
+                clauses.append(f'(issue_date >= "{year}-01" and issue_date <= "{year}-12")')
+
+            elif cond.operator == "gte" and cond.value is not None:
+                year = int(cond.value)
+                clauses.append(f'(issue_date >= "{year}-01")')
+
+            elif cond.operator == "gt" and cond.value is not None:
+                year = int(cond.value)
+                clauses.append(f'(issue_date > "{year}-12")')
+
+            elif cond.operator == "lte" and cond.value is not None:
+                year = int(cond.value)
+                clauses.append(f'(issue_date <= "{year}-12")')
+
+            elif cond.operator == "lt" and cond.value is not None:
+                year = int(cond.value)
+                clauses.append(f'(issue_date < "{year}-01")')
+
+            elif cond.operator == "between" and cond.start is not None and cond.end is not None:
+                start_year = int(cond.start)
+                end_year = int(cond.end)
+                clauses.append(
+                    f'(issue_date >= "{start_year}-01" and issue_date <= "{end_year}-12")'
+                )
+
+        elif cond.granularity == "year_month":
+            if cond.operator == "eq" and cond.value is not None:
+                clauses.append(f'(issue_date == "{cond.value}")')
+
+            elif cond.operator == "gte" and cond.value is not None:
+                clauses.append(f'(issue_date >= "{cond.value}")')
+
+            elif cond.operator == "gt" and cond.value is not None:
+                clauses.append(f'(issue_date > "{cond.value}")')
+
+            elif cond.operator == "lte" and cond.value is not None:
+                clauses.append(f'(issue_date <= "{cond.value}")')
+
+            elif cond.operator == "lt" and cond.value is not None:
+                clauses.append(f'(issue_date < "{cond.value}")')
+
+            elif cond.operator == "between" and cond.start is not None and cond.end is not None:
+                clauses.append(
+                    f'(issue_date >= "{cond.start}" and issue_date <= "{cond.end}")'
+                )
+
+    return clauses
+
+def build_milvus_expr(
+    *,
+    time_conditions: list[TimeCondition],
+    site: list[str],
+    fab: list[str],
+    tech: list[str],
+    area: list[str],
+) -> str | None:
+    clauses: list[str] = []
+
+    for expr in [
+        _build_in_filter("site", site),
+        _build_in_filter("fab", fab),
+        _build_in_filter("tech", tech),
+        _build_in_filter("area", area),
+    ]:
+        if expr:
+            clauses.append(expr)
+
+    clauses.extend(_build_time_filter(time_conditions))
+
+    if not clauses:
+        return None
+
+    return " and ".join(clauses)
+
+from langchain_core.documents import Document
+
+
+def normalize_langchain_milvus_results(
+    results: list[tuple[Document, float]],
+    *,
+    score_threshold: float | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    candidates: list[dict[str, Any]] = []
+
+    for doc, score in results:
+        # L2: 작을수록 유사
+        if score_threshold is not None and score > score_threshold:
+            continue
+
+        metadata = doc.metadata or {}
+        issue_no = metadata.get("issue_no")
+        if not issue_no:
+            continue
+
+        candidates.append(
+            {
+                "issue_no": issue_no,
+                "score": float(score),
+                "issue_date": metadata.get("issue_date"),
+                "site": metadata.get("site"),
+                "fab": metadata.get("fab"),
+                "tech": metadata.get("tech"),
+                "area": metadata.get("area"),
+                "text": doc.page_content,
+            }
+        )
+
+    # L2는 score가 낮을수록 더 좋음
+    candidates.sort(key=lambda x: x["score"])
+
+    seen: set[str] = set()
+    candidate_issue_ids: list[str] = []
+
+    for item in candidates:
+        issue_no = item["issue_no"]
+        if issue_no not in seen:
+            seen.add(issue_no)
+            candidate_issue_ids.append(issue_no)
+
+    return candidates, candidate_issue_ids
+
+
+from langchain_milvus.vectorstores import Milvus
+
+
+class SemanticRetriever:
+    def __init__(
+        self,
+        milvus_store: Milvus,
+        config: SemanticRetrieverConfig | None = None,
+    ):
+        self.milvus_store = milvus_store
+        self.config = config or SemanticRetrieverConfig()
+
+    def retrieve(self, state: AgentState) -> dict[str, Any]:
+        semantic_phrase = state.semantic_phrase
+
+        if not semantic_phrase or not semantic_phrase.strip():
+            return {
+                "semantic_candidates": [],
+                "candidate_issue_ids": [],
+                "semantic_retrieval_reason": "semantic_phrase가 없어 semantic 검색을 수행하지 않음",
+            }
+
+        expr = build_milvus_expr(
+            time_conditions=state.time_conditions,
+            site=state.site,
+            fab=state.fab,
+            tech=state.tech,
+            area=state.area,
+        )
+
+        results = self.milvus_store.similarity_search_with_score(
+            query=semantic_phrase,
+            k=self.config.top_k,
+            expr=expr,
+        )
+
+        candidates, candidate_issue_ids = normalize_langchain_milvus_results(
+            results,
+            score_threshold=self.config.score_threshold,
+        )
+
+        reason = (
+            f"semantic_phrase='{semantic_phrase}' 기준으로 "
+            f"{len(candidate_issue_ids)}개 issue 후보 검색"
+        )
+        if expr:
+            reason += f", metadata filter 적용: {expr}"
+
+        return {
+            "semantic_candidates": candidates,
+            "candidate_issue_ids": candidate_issue_ids,
+            "semantic_retrieval_reason": reason,
+        }
+
+
