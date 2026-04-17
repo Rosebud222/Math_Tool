@@ -357,6 +357,15 @@ Rules:
 - If a value is ambiguous, do not include it.
 - If nothing is mentioned, return [].
 
+Do NOT extract a categorical value only because it appears as a substring in the query.
+
+A categorical value should be extracted only when:
+- it is explicitly mentioned as that field, or
+- it appears in a strong field-like context, or
+- the query clearly uses it as a structured filter rather than as part of a natural language issue description.
+
+If a candidate token also appears to be part of the semantic issue phrase, prefer leaving the categorical field empty.
+
 Examples:
 
 User:
