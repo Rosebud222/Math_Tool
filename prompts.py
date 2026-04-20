@@ -758,3 +758,221 @@ SQL_GENERATOR_FEWSHOT = """
   "reason": "semantic 검증 후보 issue_no와 2025년 3월 조건을 반영한 조회 SQL"
 }
 """.strip()
+
+
+"""
+==================================================
+2. time_conditions
+==================================================
+
+Extract logical time filters if present.
+
+Return time filters using this structure:
+
+{
+  "combine_mode": "and" | "or",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year" | "year_month",
+      "operator": "eq" | "gte" | "lte" | "gt" | "lt" | "between",
+      "value": single value or null,
+      "start": start value or null,
+      "end": end value or null
+    }
+  ]
+}
+
+Rules:
+
+1. Always use:
+- field = "issue_date"
+
+2. Use granularity:
+- "year" for year-based expressions
+- "year_month" for year-month expressions
+
+3. Use combine_mode:
+- "and" when all conditions must be satisfied together
+- "or" when the query means one of multiple alternative periods
+
+4. Return:
+- "combine_mode": "and", "conditions": [] if no time condition exists
+
+--------------------------------------------------
+Supported Patterns
+--------------------------------------------------
+
+A. Single year
+Examples:
+- 2025년
+- 25년
+
+Output:
+{
+  "combine_mode": "and",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "eq",
+      "value": 2025,
+      "start": null,
+      "end": null
+    }
+  ]
+}
+
+B. After / Since
+Examples:
+- 2023년 이후
+- 2024년부터
+
+Output:
+{
+  "combine_mode": "and",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "gte",
+      "value": 2023,
+      "start": null,
+      "end": null
+    }
+  ]
+}
+
+C. Before / Until
+Examples:
+- 2024년 이전
+- 2023년까지
+
+Outputs:
+- "2024년 이전"
+{
+  "combine_mode": "and",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "lt",
+      "value": 2024,
+      "start": null,
+      "end": null
+    }
+  ]
+}
+
+- "2023년까지"
+{
+  "combine_mode": "and",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "lte",
+      "value": 2023,
+      "start": null,
+      "end": null
+    }
+  ]
+}
+
+D. Between
+Examples:
+- 2024년부터 2025년까지
+
+Output:
+{
+  "combine_mode": "and",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "between",
+      "value": null,
+      "start": 2024,
+      "end": 2025
+    }
+  ]
+}
+
+E. Single month
+Examples:
+- 2025년 3월
+
+Output:
+{
+  "combine_mode": "and",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year_month",
+      "operator": "eq",
+      "value": "2025-03",
+      "start": null,
+      "end": null
+    }
+  ]
+}
+
+F. Multiple alternative periods
+Examples:
+- 2024년과 2025년
+- 2024년 또는 2025년
+- 2024년, 2025년
+
+These mean one of multiple acceptable periods, so use combine_mode = "or".
+
+Output:
+{
+  "combine_mode": "or",
+  "conditions": [
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "eq",
+      "value": 2024,
+      "start": null,
+      "end": null
+    },
+    {
+      "field": "issue_date",
+      "granularity": "year",
+      "operator": "eq",
+      "value": 2025,
+      "start": null,
+      "end": null
+    }
+  ]
+}
+
+--------------------------------------------------
+Disambiguation Rules
+--------------------------------------------------
+
+- If the query means a continuous range, use one condition with operator "between", not multiple eq conditions.
+  Example:
+  "2024년부터 2025년까지" -> between 2024 and 2025
+
+- If the query explicitly lists multiple separate years or months, use multiple conditions.
+  Example:
+  "2024년과 2025년" -> combine_mode "or" with two eq conditions
+
+- If one condition narrows another, use combine_mode "and".
+  Example:
+  "2023년 이후 2025년 이전" -> combine_mode "and"
+
+- Do not invent time conditions that are not stated or clearly implied.
+
+- Normalize two-digit years:
+  - 25년 -> 2025
+  - 24년 -> 2024
+
+- If no time expression exists, return:
+{
+  "combine_mode": "and",
+  "conditions": []
+}
+"""
