@@ -1,27 +1,60 @@
 import oracledb
 from typing import Any
+import oracledb
+from typing import Any
 
 
-def fetch_data(query: str, params: dict[str, Any] | None = None):
+def fetch_data(
+    query: str,
+    params: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Oracle SQL 실행 후 결과를 list[dict] 형태로 반환한다.
+
+    특징:
+    - bind params 지원
+    - CLOB / NCLOB / BLOB(oracledb.LOB) 자동 read()
+    - 컬럼명을 key로 사용하는 dict row 반환
+
+    Example:
+        rows = fetch_data(
+            "SELECT issue_no, issue_name FROM Q_ISSUE WHERE issue_no=:issue_id_0",
+            {"issue_id_0": "ISSUE-001"}
+        )
+
+        rows == [
+            {
+                "ISSUE_NO": "ISSUE-001",
+                "ISSUE_NAME": "Bridge 불량"
+            }
+        ]
+    """
     with get_oracle_db() as connection:
         cursor = connection.cursor()
+
         try:
             cursor.execute(query, params or {})
-            raw_result = cursor.fetchall()
+
             col_names = [col[0] for col in cursor.description]
+            raw_rows = cursor.fetchall()
 
-            # CLOB/NCLOB/BLOB 수동 변환
-            result = []
-            for row in raw_result:
-                converted_row = []
-                for value in row:
+            result: list[dict[str, Any]] = []
+
+            for row in raw_rows:
+                row_dict: dict[str, Any] = {}
+
+                for idx, value in enumerate(row):
+                    # LOB 타입은 문자열/bytes로 변환
                     if isinstance(value, oracledb.LOB):
-                        converted_row.append(value.read())
+                        converted_value = value.read()
                     else:
-                        converted_row.append(value)
-                result.append(converted_row)
+                        converted_value = value
 
-            return result, col_names
+                    row_dict[col_names[idx]] = converted_value
+
+                result.append(row_dict)
+
+            return result
 
         finally:
             cursor.close()
